@@ -1,0 +1,83 @@
+{
+	"name": "customerType1",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "Customers",
+						"type": "DatasetReference"
+					},
+					"name": "SourceFile"
+				},
+				{
+					"dataset": {
+						"referenceName": "dim_cust",
+						"type": "DatasetReference"
+					},
+					"name": "TargetDimCust"
+				},
+				{
+					"dataset": {
+						"referenceName": "dim_cust",
+						"type": "DatasetReference"
+					},
+					"name": "MaxSkey"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "dim_cust",
+						"type": "DatasetReference"
+					},
+					"name": "Updatesink"
+				},
+				{
+					"dataset": {
+						"referenceName": "dim_cust2",
+						"type": "DatasetReference"
+					},
+					"name": "Insertsink"
+				}
+			],
+			"transformations": [
+				{
+					"name": "ExistingRecords"
+				},
+				{
+					"name": "SrcFileHash"
+				},
+				{
+					"name": "Exists"
+				},
+				{
+					"name": "LookupDim"
+				},
+				{
+					"name": "ConditionalSplit"
+				},
+				{
+					"name": "JoinMax"
+				},
+				{
+					"name": "SurrogateKey"
+				},
+				{
+					"name": "InsertDerivedColumn"
+				},
+				{
+					"name": "InsertRow"
+				},
+				{
+					"name": "UpdateDerivedColumn"
+				},
+				{
+					"name": "UpdateRow"
+				}
+			],
+			"script": "source(output(\n\t\tCustomerID as short,\n\t\tNameStyle as boolean,\n\t\tTitle as string,\n\t\tFirstName as string,\n\t\tMiddleName as string,\n\t\tLastName as string,\n\t\tSuffix as string,\n\t\tCompanyName as string,\n\t\tSalesPerson as string,\n\t\tEmailAddress as string,\n\t\tPhone as string,\n\t\tPasswordHash as string,\n\t\tPasswordSalt as string,\n\t\trowguid as string,\n\t\tModifiedDate as string\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tlimit: 100,\n\trowUrlColumn: 'SrcFileName',\n\twildcardPaths:['input/Customer.csv']) ~> SourceFile\nsource(output(\n\t\tId_Cust as integer,\n\t\tEmailAddress as string,\n\t\tTypeoneRecordHash as string\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tquery: 'SELECT Id_Cust\\n      ,EmailAddress\\n      ,TypeoneRecordHash\\n      FROM DIM_Customer',\n\tformat: 'query') ~> TargetDimCust\nsource(output(\n\t\tMax_SKey as integer\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tquery: 'SELECT ISNULL(Max(Id_Cust),0) Max_SKey\\n      FROM DIM_Customer',\n\tformat: 'query') ~> MaxSkey\nTargetDimCust select(mapColumn(\n\t\tId_Cust_dim = Id_Cust,\n\t\tEmailAddress_dim = EmailAddress,\n\t\tTypeoneRecordHash_dim = TypeoneRecordHash\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> ExistingRecords\nSourceFile derive(SourceType1Hash = sha2(256,EmailAddress,Phone,LastName)) ~> SrcFileHash\nSrcFileHash, ExistingRecords exists(SourceType1Hash == TypeoneRecordHash_dim,\n\tnegate:true,\n\tbroadcast: 'auto')~> Exists\nExists, ExistingRecords lookup(EmailAddress == EmailAddress_dim,\n\tmultiple: false,\n\tpickup: 'any',\n\tbroadcast: 'auto')~> LookupDim\nLookupDim split(isNull(EmailAddress_dim),\n\tdisjoint: false) ~> ConditionalSplit@(NewItems, UpdateItems)\nConditionalSplit@NewItems, MaxSkey join(1 == 1,\n\tjoinType:'cross',\n\tbroadcast: 'auto')~> JoinMax\nJoinMax keyGenerate(output(NewSkey as long),\n\tstartAt: 1L) ~> SurrogateKey\nSurrogateKey derive(NewSkey = NewSkey + Max_SKey,\n\t\tDWIsCurrent = '1',\n\t\tEffectiveStartDate = currentDate(),\n\t\tEffectiveEndDate = toDate('2100-01-01'),\n\t\tRecordLastUpdated = currentDate()) ~> InsertDerivedColumn\nInsertDerivedColumn alterRow(insertIf(1==1)) ~> InsertRow\nConditionalSplit@UpdateItems derive(RecordLastUpdated = currentDate()) ~> UpdateDerivedColumn\nUpdateDerivedColumn alterRow(updateIf(1==1)) ~> UpdateRow\nUpdateRow sink(input(\n\t\tId_Cust as integer,\n\t\tTitle as string,\n\t\tFirstName as string,\n\t\tMiddleName as string,\n\t\tLastName as string,\n\t\tEmailAddress as string,\n\t\tPhone as string,\n\t\tTypeoneRecordHash as string,\n\t\tDWIsCurrent as integer,\n\t\tEffectiveStartDate as date,\n\t\tEffectiveEndDate as date\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:false,\n\tupdateable:true,\n\tupsertable:false,\n\tkeys:['EmailAddress'],\n\tformat: 'table',\n\tmapColumn(\n\t\tId_Cust = Id_Cust_dim,\n\t\tTitle,\n\t\tFirstName,\n\t\tMiddleName,\n\t\tLastName,\n\t\tEmailAddress,\n\t\tPhone,\n\t\tTypeoneRecordHash = SourceType1Hash,\n\t\tEffectiveEndDate = RecordLastUpdated\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> Updatesink\nInsertRow sink(input(\n\t\tId_Cust as integer,\n\t\tTitle as string,\n\t\tFirstName as string,\n\t\tMiddleName as string,\n\t\tLastName as string,\n\t\tEmailAddress as string,\n\t\tPhone as string,\n\t\tTypeoneRecordHash as string,\n\t\tDWIsCurrent as integer,\n\t\tEffectiveStartDate as date,\n\t\tEffectiveEndDate as date,\n\t\tRecordLastUpdated as date\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:true,\n\tupdateable:false,\n\tupsertable:false,\n\tformat: 'table',\n\tmapColumn(\n\t\tId_Cust = NewSkey,\n\t\tTitle,\n\t\tFirstName,\n\t\tMiddleName,\n\t\tLastName,\n\t\tEmailAddress,\n\t\tPhone,\n\t\tTypeoneRecordHash = SourceType1Hash,\n\t\tDWIsCurrent,\n\t\tEffectiveStartDate,\n\t\tEffectiveEndDate\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> Insertsink"
+		}
+	}
+}

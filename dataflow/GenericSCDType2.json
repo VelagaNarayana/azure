@@ -1,0 +1,81 @@
+{
+	"name": "GenericSCDType2",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "GenericSrcDataset",
+						"type": "DatasetReference"
+					},
+					"name": "GenericInput"
+				},
+				{
+					"dataset": {
+						"referenceName": "sqlTable",
+						"type": "DatasetReference"
+					},
+					"name": "ExistingDimTable"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "sqlTable",
+						"type": "DatasetReference"
+					},
+					"name": "DimTableSink"
+				}
+			],
+			"transformations": [
+				{
+					"name": "AddHashInput"
+				},
+				{
+					"name": "FilterActive"
+				},
+				{
+					"name": "AddHashExisting"
+				},
+				{
+					"name": "Exists"
+				},
+				{
+					"name": "SurrogateKey"
+				},
+				{
+					"name": "GetMaxSkey"
+				},
+				{
+					"name": "JoinWithMaxKey"
+				},
+				{
+					"name": "FilterForUpdateValues"
+				},
+				{
+					"name": "AddColumns"
+				},
+				{
+					"name": "DropUnwantedColsIns"
+				},
+				{
+					"name": "MarkInsert"
+				},
+				{
+					"name": "UnionAll"
+				},
+				{
+					"name": "UpdateObselete"
+				},
+				{
+					"name": "MarkAsUpdate"
+				},
+				{
+					"name": "DropUnwantedColsUpd"
+				}
+			],
+			"script": "parameters{\n\tPrimaryKey as string ('EmailAddress'),\n\tColumns as string ('LastName,Phone')\n}\nsource(allowSchemaDrift: true,\n\tvalidateSchema: false) ~> GenericInput\nsource(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tformat: 'table') ~> ExistingDimTable\nGenericInput derive(id_hash = md5(byName($PrimaryKey)),\n\t\tcolumns_hash = md5(byNames(split($Columns,',')))) ~> AddHashInput\nExistingDimTable filter(toInteger(byName('DWIsCurrent'))==1) ~> FilterActive\nFilterActive derive(id_hash = md5(byNames(split($PrimaryKey,','))),\n\t\tcolumns_hash = md5(byNames(split($Columns,',')))) ~> AddHashExisting\nAddHashInput, AddHashExisting exists(AddHashInput@id_hash == AddHashExisting@id_hash\n\t&& AddHashInput@columns_hash == AddHashExisting@columns_hash,\n\tnegate:true,\n\tbroadcast: 'auto')~> Exists\nExists keyGenerate(output(Skey as long),\n\tstartAt: 1L) ~> SurrogateKey\nAddHashExisting aggregate(MaxSkey = max(toInteger(byName('Id_Cust')))) ~> GetMaxSkey\nSurrogateKey, GetMaxSkey join(Skey==MaxSkey||true(),\n\tjoinType:'cross',\n\tbroadcast: 'auto')~> JoinWithMaxKey\nAddHashExisting, Exists exists(AddHashExisting@id_hash == AddHashInput@id_hash,\n\tnegate:false,\n\tbroadcast: 'auto')~> FilterForUpdateValues\nJoinWithMaxKey derive(Id_Cust = Skey + MaxSkey,\n\t\tDWIsCurrent = 1,\n\t\tEffectiveStartDate = currentDate(),\n\t\tEffectiveEndDate = toDate('2000-01-01'),\n\t\tTypeoneRecordHash = columns_hash) ~> AddColumns\nAddColumns select(mapColumn(\n\t\teach(match(!in(['id_hash','columns_hash','MaxSkey','CustomerID','NameStyle','Suffix','CompanyName','SalesPerson','PasswordHash','PasswordSalt','rowguid','ModifiedDate','Skey'],name)))\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> DropUnwantedColsIns\nDropUnwantedColsIns alterRow(insertIf(true())) ~> MarkInsert\nMarkInsert, DropUnwantedColsUpd union(byName: true)~> UnionAll\nFilterForUpdateValues derive(DWIsCurrent = 0,\n\t\tEffectiveEndDate = currentDate(),\n\t\tTypeoneRecordHash = columns_hash) ~> UpdateObselete\nUpdateObselete alterRow(updateIf(true())) ~> MarkAsUpdate\nMarkAsUpdate select(mapColumn(\n\t\teach(match(!in(['id_hash','columns_hash'],name)))\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> DropUnwantedColsUpd\nUnionAll sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:true,\n\tupdateable:true,\n\tupsertable:false,\n\tkeys:[($PrimaryKey)],\n\tformat: 'table',\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> DimTableSink"
+		}
+	}
+}

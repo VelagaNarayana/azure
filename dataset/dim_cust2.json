@@ -1,0 +1,68 @@
+{
+	"name": "dim_cust2",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "sqldb",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "Id_Cust",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "Title",
+				"type": "varchar"
+			},
+			{
+				"name": "FirstName",
+				"type": "varchar"
+			},
+			{
+				"name": "MiddleName",
+				"type": "varchar"
+			},
+			{
+				"name": "LastName",
+				"type": "varchar"
+			},
+			{
+				"name": "EmailAddress",
+				"type": "varchar"
+			},
+			{
+				"name": "Phone",
+				"type": "varchar"
+			},
+			{
+				"name": "TypeoneRecordHash",
+				"type": "varchar"
+			},
+			{
+				"name": "DWIsCurrent",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "EffectiveStartDate",
+				"type": "date"
+			},
+			{
+				"name": "EffectiveEndDate",
+				"type": "date"
+			},
+			{
+				"name": "RecordLastUpdated",
+				"type": "date"
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "DIM_Customer"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

@@ -1,0 +1,76 @@
+{
+	"name": "GenericSCDType2",
+	"properties": {
+		"activities": [
+			{
+				"name": "GenericSCDType2",
+				"type": "ExecuteDataFlow",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataflow": {
+						"referenceName": "GenericSCDType2",
+						"type": "DataFlowReference",
+						"parameters": {
+							"PrimaryKey": {
+								"value": "'@{pipeline().parameters.PrimaryKey}'",
+								"type": "Expression"
+							},
+							"Columns": {
+								"value": "'@{pipeline().parameters.ColumnNames}'",
+								"type": "Expression"
+							}
+						},
+						"datasetParameters": {
+							"GenericInput": {
+								"Folder": {
+									"value": "@pipeline().parameters.SourceFolder",
+									"type": "Expression"
+								}
+							},
+							"ExistingDimTable": {
+								"DimTable": {
+									"value": "@pipeline().parameters.DimensionTable",
+									"type": "Expression"
+								}
+							},
+							"DimTableSink": {
+								"DimTable": {
+									"value": "@pipeline().parameters.DimensionTable",
+									"type": "Expression"
+								}
+							}
+						}
+					},
+					"compute": {
+						"coreCount": 8,
+						"computeType": "General"
+					}
+				}
+			}
+		],
+		"parameters": {
+			"SourceFolder": {
+				"type": "String"
+			},
+			"DimensionTable": {
+				"type": "String"
+			},
+			"PrimaryKey": {
+				"type": "String"
+			},
+			"ColumnNames": {
+				"type": "String"
+			}
+		},
+		"annotations": []
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
